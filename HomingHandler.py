@@ -3,21 +3,19 @@ import cvra_rpc.service_call
 from trajectory_publisher import *
 from math import copysign
 import time
-import argparse
 import threading
 
-DESTINATION = ("192.168.3.20", 20001)
 
 TOLERANCE = 0.1
 SETPOINT_FACTOR = 1.5
 
-
-
 class HomingHandler:
     actuators = []
 
-    def __init__(self):
-        self.pub = SimpleRPCActuatorPublisher(("192.168.3.20", 20000))
+    def __init__(self, ip):
+        self.ip = ip
+        self.DESTINATION = (ip, 20001)
+        self.pub = SimpleRPCActuatorPublisher((ip, 20000))
 
     class Actuator:
         def __init__(self, string_id):
@@ -29,10 +27,12 @@ class HomingHandler:
             self.pos_setpoint_factor = 0.3
             self.stop = False
 
-    def add(self, actuator_id):
-        self.actuators.append(self.Actuator(actuator_id))
-        cvra_rpc.service_call.call(DESTINATION, 'config_update', [{'actuator': {actuator_id: {'stream': {'index': 10}}}}])
-        cvra_rpc.service_call.call(DESTINATION, 'config_update', [{'actuator': {actuator_id: {'stream': {'motor_pos': 30}}}}])
+
+    def add(self, actuator_ids):
+        for actuator_id in actuator_ids:
+            self.actuators.append(self.Actuator(actuator_id))
+            cvra_rpc.service_call.call(self.DESTINATION, 'config_update', [{'actuator': {actuator_id: {'stream': {'index': 10}}}}])
+            cvra_rpc.service_call.call(self.DESTINATION, 'config_update', [{'actuator': {actuator_id: {'stream': {'motor_pos': 30}}}}])
 
     def index_callback(self, args):
         for actuator in self.actuators:
@@ -47,13 +47,11 @@ class HomingHandler:
                             self.pub.publish(time.time())
                         else:
                             actuator.stop = True
-                            cvra_rpc.service_call.call(DESTINATION, 'config_update', [{'actuator': {actuator.string_id: {'stream': {'index': 0}}}}])
-                            cvra_rpc.service_call.call(DESTINATION, 'config_update', [{'actuator': {actuator.string_id: {'stream': {'motor_pos': 0}}}}])
+                            cvra_rpc.service_call.call(self.DESTINATION, 'config_update', [{'actuator': {actuator.string_id: {'stream': {'index': 0}}}}])
+                            cvra_rpc.service_call.call(self.DESTINATION, 'config_update', [{'actuator': {actuator.string_id: {'stream': {'motor_pos': 0}}}}])
                             actuator.index_pos = (actuator.index_pos + args[1]) / 2
                             self.pub.update_actuator(actuator.string_id, PositionSetpoint(actuator.index_pos))
                             self.pub.publish(time.time())
-                            print(actuator.string_id)
-                            print(actuator.index_pos)
 
     def pos_callback(self, args):
         for actuator in self.actuators:
@@ -73,37 +71,29 @@ class HomingHandler:
                             self.pub.publish(time.time())
                             actuator.pos_setpoint_factor *= -SETPOINT_FACTOR
 
+    def server_thread(self, server):
+        server.serve_forever()
+        return
 
-def server_thread(server):
-    server.serve_forever()
-    return
+    def start(self):
+        TARGET = ('0.0.0.0', 20042)
 
+        callbacks = {'position': self.pos_callback, 'index': self.index_callback}
 
+        RequestHandler = create_request_handler(callbacks)
+        server = socketserver.UDPServer(TARGET, RequestHandler)
 
-#parser = argparse.ArgumentParser()
-#parser.add_argument('actuator')
-#args = parser.parse_args()
+        t = threading.Thread(target=self.server_thread, args=(server,))
+        t.start()
 
-TARGET = ('0.0.0.0', 20042)
+        not_done = True
 
-hominghandler = HomingHandler()
-hominghandler.add('right-shoulder')
-hominghandler.add('right-elbow')
-hominghandler.add('right-wrist')
-callbacks = {'position': hominghandler.pos_callback, 'index': hominghandler.index_callback}
+        while not_done:
+            not_done = False
+            for a in self.actuators:
+                if not a.stop:
+                    not_done = True
 
-RequestHandler = create_request_handler(callbacks)
-server = socketserver.UDPServer(TARGET, RequestHandler)
+        server.shutdown()
 
-t = threading.Thread(target=server_thread, args=(server,))
-t.start()
-
-not_done = True
-
-while not_done:
-    not_done = False
-    for a in HomingHandler.actuators:
-        if not a.stop:
-            not_done = True
-
-server.shutdown()
+        return {a.string_id: a.index_pos for a in self.actuators}
