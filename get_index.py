@@ -1,5 +1,5 @@
-from HomingHandler import HomingHandler
+from HomingHandler import Indexer
 
-hominghandler = HomingHandler("192.168.3.20")
-hominghandler.add(['right-shoulder', 'right-elbow', 'right-wrist'])
-print(hominghandler.start())
+indexer = Indexer("192.168.3.20")
+indexer.add(['right-shoulder', 'right-elbow', 'right-wrist'])
+print(indexer.start())
