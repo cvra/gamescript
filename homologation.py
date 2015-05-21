@@ -1,10 +1,13 @@
-from cvra_rpc.service_call import call
+from cvra_rpc.service_call import *
+
 from cvra_actuatorpub.trajectory_publisher import *
 import time
 import logging
 from math import pi
 import math
 import argparse
+from threading import Thread, Event
+import socketserver
 
 YELLOW="yellow"
 GREEN="green"
@@ -12,6 +15,8 @@ GREEN="green"
 right_wheel_radius = 0.019
 left_wheel_radius = 0.019
 wheelbase = 0.155
+game_start_event = Event()
+
 
 def move_base(distance, pub, actuators):
     logging.info('Moving {}'.format(distance))
@@ -81,13 +86,11 @@ def main():
         logging.info(create_actuator(args.host, actuator))
 
     # Find zero
+    logging.warning("Not implemented yet: find zeroes")
 
-
-    # Bras droit au corps (home)
-    # move_arm('right', 0, -pi/2, pi/3, 0)
-    # Bras gauche au corps (home)
-    # move_arm('left', 0, -pi/2, pi/3, 0)
-    # Avancer 500
+    logging.info("Waiting for start...")
+    game_start_event.wait()
+    logging.info("Starting!")
 
     # Clap clap
     fwd(0.5); time.sleep(2.)
@@ -100,24 +103,23 @@ def main():
 
 
 
+def button_released(args):
+    logging.info("Button {} release".format(args))
+    if args[0] == 'start':
+        game_start_event.set()
 
 
-    # Tourner -pi/2
-    # turn_base(-pi/2)
-    # Avancer 700
-    # move_base(0.7)
-    # Tourner pi/2
-    # turn_base(pi/2)
-    # Avancer 100
-    # move_base(0.1)
-    # Déployer bras droit à plat
-    # move_arm('right', 0.2, -pi/2, pi/3, 0)
-    # move_arm('right', 0.2, 0, 0, 0)
-    # Avancer 200
-    # move_base(0.2)
-    # Bras droit au corps
-    # move_arm('right', 0.2, -pi/2, pi/3, 0)
+def interface_thread():
+    logging.info("Starting interface panel thread")
+    try:
+        MyTCPHandler = create_request_handler({'button_released':button_released})
+        server = socketserver.TCPServer(('0.0.0.0', 20002), MyTCPHandler)
+        server.serve_forever()
+    except KeyboardInterrupt:
+        logging.error("Received Ctrl-c exiting cleanly...")
+        server.shutdown()
 
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)
+    Thread(target=interface_thread).start()
     main()
