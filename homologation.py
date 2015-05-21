@@ -1,27 +1,31 @@
 from cvra_rpc.service_call import call
 from cvra_actuatorpub.trajectory_publisher import *
 import time
+import logging
+from math import pi
+import argparse
 
-HOST = '192.168.3.20'
+right_wheel_radius = 0.019
+left_wheel_radius = 0.019
+wheelbase = 0.155
 
-def move_base(distance):
-    global pub, actuators
-    actuators['right-wheel'][0] += distance / (2 * pi * right-wheel-radius)
-    actuators['left-wheel'][0] += distance / (2 * pi * left-wheel-radius)
-    pub.update_actuator('right-wheel', PositionSetpoint(actuators['right-wheel'][0] + actuators['right-wheel'][1]))
-    pub.update_actuator('left-wheel', PositionSetpoint(actuators['left-wheel'][0] + actuators['left-wheel'][0]))
+def move_base(distance, pub, actuators):
+    logging.info('Moving {}'.format(distance))
+    actuators['right-wheel'] += distance / right_wheel_radius
+    actuators['left-wheel'] += distance / left_wheel_radius
+    pub.update_actuator('right-wheel', PositionSetpoint(actuators['right-wheel']))
+    pub.update_actuator('left-wheel', PositionSetpoint(actuators['left-wheel']))
     pub.publish(time.time())
 
-def turn_base(angle):
-    global pub, actuators
-    actuators['right-wheel'][0] += angle * wheelbase / (2 * pi * right-wheel-radius)
-    actuators['left-wheel'][0] += - angle * wheelbase / (2 * pi * left-wheel-radius)
-    pub.update_actuator('right-wheel', PositionSetpoint(actuators['right-wheel'][0] + actuators['right-wheel'][1]))
-    pub.update_actuator('left-wheel', PositionSetpoint(actuators['left-wheel'][0] + actuators['left-wheel'][0]))
+def turn_base(angle, pub, actuators):
+    logging.info('Turning {}'.format(distance))
+    actuators['right-wheel'] += angle * wheelbase / right_wheel_radius
+    actuators['left-wheel'] += - angle * wheelbase / left_wheel_radius
+    pub.update_actuator('right-wheel', PositionSetpoint(actuators['right-wheel']))
+    pub.update_actuator('left-wheel', PositionSetpoint(actuators['left-wheel']))
     pub.publish(time.time())
 
-def move_arm(flip, z, shoulder, elbow, wrist):
-    global pub, actuators
+def move_arm(flip, z, shoulder, elbow, wrist, pub, actuators):
     actuators[flip + '-z'][0] = z
     actuators[flip + '-shoulder'][0] = shoulder
     actuators[flip + '-elbow'][0] = elbow
@@ -32,52 +36,60 @@ def move_arm(flip, z, shoulder, elbow, wrist):
     pub.update_actuator(flip + '-wrist', PositionSetpoint(actuators[flip + '-wrist'][0]))
     pub.publish(time.time())
 
-def create_actuator(name):
-    return call((HOST, 20001), 'actuator_create_driver', [name])
+def create_actuator(host, name):
+    return call((host, 20001), 'actuator_create_driver', [name])
+
+def parse_cmdline():
+    parser = argparse.ArgumentParser('Ugly homologation script')
+    parser.add_argument('host', help="Master board IP")
+    return parser.parse_args()
 
 def main():
-    global pub, actuators
-    pub = SimpleRPCActuatorPublisher((HOST, 20000))
+    args = parse_cmdline()
+
+    pub = SimpleRPCActuatorPublisher((args.host, 20000))
 
     # First value is position, second value is index
-    actuators = {'right-wheel':    [0.0, 0.0],
+    actuators = {'right-wheel':    0.,
                  'right-z':        [0.0, 0.0],
                  'right-shoulder': [0.0, 0.0],
                  'right-elbow':    [0.0, 0.0],
                  'right-wrist':    [0.0, 0.0],
-                 'left-wheel':     [0.0, 0.0],
+                 'left-wheel':     0.,
                  'left-z':         [0.0, 0.0],
                  'left-shoulder':  [0.0, 0.0],
                  'left-elbow':     [0.0, 0.0],
                  'left-wrist':     [0.0, 0.0]}
 
     for actuator in actuators:
-        print(create_actuator(actuator))
+        logging.info('Creating actuator {}'.format(actuator))
+        logging.info(create_actuator(args.host, actuator))
 
     # Find zero
 
 
     # Bras droit au corps (home)
-    move_arm('right', 0, -pi/2, pi/3, 0)
+    # move_arm('right', 0, -pi/2, pi/3, 0)
     # Bras gauche au corps (home)
-    move_arm('left', 0, -pi/2, pi/3, 0)
+    # move_arm('left', 0, -pi/2, pi/3, 0)
     # Avancer 500
-    move_base(0.5)
+    move_base(0.1, pub, actuators)
     # Tourner -pi/2
-    turn_base(-pi/2)
+    # turn_base(-pi/2)
     # Avancer 700
-    move_base(0.7)
+    # move_base(0.7)
     # Tourner pi/2
-    turn_base(pi/2)
+    # turn_base(pi/2)
     # Avancer 100
-    move_base(0.1)
+    # move_base(0.1)
     # Déployer bras droit à plat
-    move_arm('right', 0.2, -pi/2, pi/3, 0)
-    move_arm('right', 0.2, 0, 0, 0)
+    # move_arm('right', 0.2, -pi/2, pi/3, 0)
+    # move_arm('right', 0.2, 0, 0, 0)
     # Avancer 200
-    move_base(0.2)
+    # move_base(0.2)
     # Bras droit au corps
-    move_arm('right', 0.2, -pi/2, pi/3, 0)
+    # move_arm('right', 0.2, -pi/2, pi/3, 0)
 
 if __name__ == "__main__":
+    logging.getLogger().setLevel(logging.INFO)
     main()
