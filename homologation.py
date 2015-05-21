@@ -3,7 +3,11 @@ from cvra_actuatorpub.trajectory_publisher import *
 import time
 import logging
 from math import pi
+import math
 import argparse
+
+YELLOW="yellow"
+GREEN="green"
 
 right_wheel_radius = 0.019
 left_wheel_radius = 0.019
@@ -18,9 +22,9 @@ def move_base(distance, pub, actuators):
     pub.publish(time.time())
 
 def turn_base(angle, pub, actuators):
-    logging.info('Turning {}'.format(distance))
-    actuators['right-wheel'] += angle * wheelbase / right_wheel_radius
-    actuators['left-wheel'] += - angle * wheelbase / left_wheel_radius
+    logging.info('Turning {}'.format(math.degrees(angle)))
+    actuators['right-wheel'] += angle * (wheelbase / 2) / right_wheel_radius
+    actuators['left-wheel'] += - angle * (wheelbase / 2) / left_wheel_radius
     pub.update_actuator('right-wheel', PositionSetpoint(actuators['right-wheel']))
     pub.update_actuator('left-wheel', PositionSetpoint(actuators['left-wheel']))
     pub.publish(time.time())
@@ -42,12 +46,23 @@ def create_actuator(host, name):
 def parse_cmdline():
     parser = argparse.ArgumentParser('Ugly homologation script')
     parser.add_argument('host', help="Master board IP")
+    parser.add_argument('color', choices=[YELLOW, GREEN])
     return parser.parse_args()
 
 def main():
     args = parse_cmdline()
 
     pub = SimpleRPCActuatorPublisher((args.host, 20000))
+
+    def fwd(x):
+        move_base(x, pub, actuators)
+
+    def turn(x):
+        if args.color == YELLOW:
+            turn_base(math.radians(x), pub, actuators)
+        else:
+            turn_base(-math.radians(x), pub, actuators)
+
 
     # First value is position, second value is index
     actuators = {'right-wheel':    0.,
@@ -73,7 +88,20 @@ def main():
     # Bras gauche au corps (home)
     # move_arm('left', 0, -pi/2, pi/3, 0)
     # Avancer 500
-    move_base(0.1, pub, actuators)
+
+    # Clap clap
+    fwd(0.5); time.sleep(2.)
+    turn(-90); time.sleep(2.)
+    fwd(0.7); time.sleep(2.)
+    turn(90); time.sleep(2.)
+    fwd(0.1); time.sleep(2.)
+    logging.warning("Moving arms here")
+    fwd(0.1); time.sleep(2.)
+
+
+
+
+
     # Tourner -pi/2
     # turn_base(-pi/2)
     # Avancer 700
